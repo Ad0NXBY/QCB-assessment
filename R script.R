@@ -108,9 +108,10 @@ long.lcpm.dgelist.filtered.norm <- as.data.frame(lcpm.dgelist.filtered.norm) %>%
 
 df.plotting <- full_join(long.cpm.dgelist.filtered.norm, long.lcpm.dgelist.filtered.norm)
 
-#filters for the gene FCGR1A and plots CPM values split by Celltype and coloured by donor
-ggplot(df.plotting |> filter(Gene_ID == "MIR6723")) + geom_point(aes(x = SRR_ID, y = CPM, color = SRR_ID)) + ggtitle("MIR6723") 
-head(df.plotting)
+
+w#filters for the gene FCGR1A and plots CPM values split by Celltype and coloured by donor
+#ggplot(df.plotting |> filter(Gene_ID == "MIR6723")) + geom_point(aes(x = SRR_ID, y = CPM, color = SRR_ID)) + ggtitle("MIR6723") 
+#head(df.plotting)
 
 #PCA ANALYSIS=================================================================================================
 #Scree plot
@@ -134,7 +135,7 @@ fviz_pca_ind(DS1.svd, label = "none", addEllipses = T, invisible = "quali") +
 fviz_pca_ind(DS1.svd, repel = FALSE)
 
 #IDENTIFICATION OF DEGs BETWEEN GROUPS========================================================================
-
+#Using the DESeq2 Package
 
 
 #HEATMAP OF TOP 15 DEGS IN EACH GROUP=========================================================================
