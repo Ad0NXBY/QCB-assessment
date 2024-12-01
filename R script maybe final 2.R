@@ -1,7 +1,9 @@
-=if (!require("BiocManager", quietly = TRUE))
+#INSTALL THESE PACKAGE============================================================================
+if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("edgeR")
 BiocManager::install("recount3")
+BiocManager::install("ComplexHeatmap")
 install.packages("tidyverse")
 install.packages("ggplot2")
 install.packages("factoextra")
@@ -12,9 +14,8 @@ library(tidyverse)
 library(ggplot2)
 library(factoextra)
 library(ggpubr)
-
-
-#Read the input data given from Mat
+library(ComplexHeatmap)
+#Read the input data==========================================================================
 indata <- read.delim("B-ALL.txt(1)/B-ALL.txt", sep = "\t")
 
 #Creating the sample metadata==================================================================
@@ -39,30 +40,31 @@ counts_matrix <- as.matrix(indata[, -1]) #do not include gene column
 rownames(counts_matrix) <- indata$Gene  #set gene names as rownames
 dgelist <- DGEList(counts = counts_matrix) #Creates a DGEList object
 
-cpm <- cpm(dgelist)
-lcpm <- cpm(dgelist, log = TRUE)
-
-###create a long (tidy) format data frame for LogCPM values--------------------------------------
-long.lcpm <- as.data.frame(lcpm) %>%
-  rownames_to_column("Gene_ID") %>%
-  pivot_longer(-Gene_ID, values_to = "LogPCM", names_to = "SRR_ID")
-
-
-
-###Create a density plot of the sample distribution-----------------------------------------
-ggplot(long.lcpm) + geom_density(aes(LogPCM, color = SRR_ID)) #To show before normalization (any significance???)
-
 ##Filtering---------------------------------------------------------------------------------
-index.keep.expr <- filterByExpr(dgelist)
-
-###Filter dgelist using filtering index, assign it to a new object called dgelist.filtered
+index.keep.expr <- filterByExpr(dgelist, group = sample.meta.data$Tissue)
+###Filter dgelist using filtering index, assign it to a new object called dgelist.filtered---
 dgelist.filtered <- dgelist[index.keep.expr, , keep.lib.sizes = FALSE]
 dim(dgelist.filtered)
 
 ###Normalization and filter on filtered list------------------------------------------------
 dgelist.filtered.norm <- calcNormFactors(dgelist.filtered, method = "TMM")
-dgelist.filtered.norm$samples$norm.factors
+dgelist.filtered.norm$samples$norm.factors#view normalization factors
 
+##Calculating LCPM of new filtered list-----------------------------------------------------
+lcpm.filtered <- cpm(dgelist.filtered, log = TRUE)
+
+###create a long (tidy) format data frame for LogCPM values--------------------------------------
+long.lcpm.filtered <- as.data.frame(lcpm.filtered) %>%
+  rownames_to_column("Gene_ID") %>%
+  pivot_longer(-Gene_ID, values_to = "LogPCM", names_to = "SRR_ID")
+
+###Create a density plot of the sample distribution-----------------------------------------
+ggplot(long.lcpm.filtered) + geom_density(aes(LogPCM, color = SRR_ID)) +
+  labs(title = "Log CPM Distribution for Filtered Genes",
+       x = "Log CPM",
+       y = "Density")
+
+##Combining CPM and LogCPM into a single dataframe================================================
 ###Calculate CPM and Log2 CPM values from the dgelist.filtered.norm object-----------------
 cpm.dgelist.filtered.norm <- cpm(dgelist.filtered.norm)
 lcpm.dgelist.filtered.norm <- cpm(dgelist.filtered.norm, log = TRUE)
@@ -77,15 +79,7 @@ long.lcpm.dgelist.filtered.norm <- as.data.frame(lcpm.dgelist.filtered.norm) %>%
   rownames_to_column("Gene_ID") %>%
   pivot_longer(-Gene_ID, values_to = "LogCPM", names_to = "SRR_ID")
 
-
-##Calculating LCPM of new filtered list-----------------------------------------------------
-lcpm.filtered <- cpm(dgelist.filtered, log = TRUE)
-##Plot density distribution by sample
-ggplot(long.lcpm.dgelist.filtered.norm) +
-  geom_density(aes(LogCPM, colour = SRR_ID)) +
-  labs(title = "Log CPM Distribution for Filtered Genes", x = "Log CPM", y = "Density")
-
-##Creting a new table that included sample and gene metadata
+###Creting a new table that included sample and gene metadata-------------------------------
 df.plotting <- full_join(long.cpm.dgelist.filtered.norm, long.lcpm.dgelist.filtered.norm)
 df.plotting <- left_join(df.plotting, sample.meta.data, by = c("SRR_ID" = "SRR_ID")) #Joining sample meta data
 df.plotting <- left_join(df.plotting, gene.meta.data, by = c("Gene_ID" = "Gene_ID"))
@@ -218,3 +212,4 @@ ggplot() +
   )
 
 #HEATMAP OF TOP 15 DEGS IN EACH GROUP==============================================================
+
