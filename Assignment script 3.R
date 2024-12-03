@@ -148,12 +148,12 @@ head(DE)
 
 #Volcano plot based on -log10 p value
 
-ggplot(DE, aes(x = logFC, y = -log10(PValue))) +
+ggplot(DE, aes(x = logFC, y = -log10(Pvalue)) +
   geom_point(alpha = 0.7) +
   labs(title = "Volcano Plot: Log Fold Change vs -Log10(PValue)",
        x = "Log Fold Change",
        y = "-Log10(PValue)") +
-  theme_minimal()
+  theme_minimal())
 
 ggplot() +
   geom_point(data = filter(DE, FDR < 0.05), aes(x = logFC, y = -log10(PValue))) +
