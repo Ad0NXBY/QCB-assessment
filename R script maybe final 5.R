@@ -1,13 +1,8 @@
 #INSTALL THESE PACKAGE============================================================================
-if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-BiocManager::install("edgeR")
-BiocManager::install("recount3")
-BiocManager::install("ComplexHeatmap")
-install.packages("tidyverse")
-install.packages("ggplot2")
-install.packages("factoextra")
-install.packages("ggpubr")
+if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("edgeR", "recount3", "ComplexHeatmap"))
+install.packages(c("tidyverse", "ggplot2", "factoextra", "ggpubr"))
+
 library(edgeR)
 library(recount3)
 library(tidyverse)
@@ -16,10 +11,11 @@ library(factoextra)
 library(ggpubr)
 library(ComplexHeatmap)
 library(ggrepel)
+
 #Read the input data==========================================================================
 indata <- read.delim("B-ALL.txt(1)/B-ALL.txt", sep = "\t")
 
-#Creating the sample metadata==================================================================
+#Creating the sample metadata ================================================================
 sample_names <- colnames(indata[, -1]) # Exclude the first column (Gene)
 sample.meta.data <- data.frame(
   SRR_ID = sample_names,
@@ -27,63 +23,79 @@ sample.meta.data <- data.frame(
   Patient = sapply(strsplit(sample_names, "_"), `[`, 1) # Extract patient ID
 )
 
-#Creating the gene metadata====================================================================
+#Creating the gene metadata===================================================================
 gene.meta.data <- data.frame(
   Gene_ID = indata$Gene,
-  Gene_Name = indata$Gene) # Using Gene column; replace if another name is available
+  Gene_Name = indata$Gene # Using Gene column; replace if another name is available
+)
 
-#Convert data to a count matrix=================================================================
+##Convert data to a count matrix --------------------------------------------------------------
 counts_matrix <- as.matrix(indata[, -1]) # Exclude the gene column
 rownames(counts_matrix) <- indata$Gene  # Set gene names as rownames
 
-#NORMALIZATION AND FILTERING FOR FILTERED AND NON-FILTERED DATA=================================
-counts_matrix <- as.matrix(indata[, -1]) #do not include gene column
-rownames(counts_matrix) <- indata$Gene  #set gene names as rownames
-dgelist <- DGEList(counts = counts_matrix) #Creates a DGEList object
+#Normalization and filtering for filtered and non-filtered data ==============================
+dgelist <- DGEList(counts = counts_matrix) # Creates a DGEList object
 
-##Filtering---------------------------------------------------------------------------------
-index.keep.expr <- filterByExpr(dgelist, group = sample.meta.data$Tissue)
-###Filter dgelist using filtering index, assign it to a new object called dgelist.filtered---
+##Filtering-----------------------------------------------------------------------------------
+index.keep.expr <- filterByExpr(dgelist, group = sample.meta.data$Tissue) # FIXED: Correct grouping
+
+##Filter lowly expressed genes ----------------------------------------------------------------
 dgelist.filtered <- dgelist[index.keep.expr, , keep.lib.sizes = FALSE]
-dim(dgelist.filtered)
 
-###Normalization and filter on filtered list------------------------------------------------
+##Normalization and filtering on filtered list -----------------------------------------------
 dgelist.filtered.norm <- calcNormFactors(dgelist.filtered, method = "TMM")
-dgelist.filtered.norm$samples$norm.factors#view normalization factors
 
-##Calculating LCPM of new filtered list-----------------------------------------------------
+##Calculate LCPM of new filtered list --------------------------------------------------------
 lcpm.filtered <- cpm(dgelist.filtered, log = TRUE)
 
-###create a long (tidy) format data frame for LogCPM values--------------------------------------
+##Create a long (tidy) format data frame for LogCPM values ------------------------------------
 long.lcpm.filtered <- as.data.frame(lcpm.filtered) %>%
   rownames_to_column("Gene_ID") %>%
   pivot_longer(-Gene_ID, values_to = "LogPCM", names_to = "SRR_ID")
 
-###Create a density plot of the sample distribution-----------------------------------------
+##Create a density plot of the sample distribution -------------------------------------------
 ggplot(long.lcpm.filtered) + geom_density(aes(LogPCM, color = SRR_ID)) +
   labs(title = "Log CPM Distribution for Filtered Genes",
        x = "Log CPM",
        y = "Density")
 
-##Combining CPM and LogCPM into a single dataframe================================================
-###Calculate CPM and Log2 CPM values from the dgelist.filtered.norm object-----------------
+#Combining CPM and LogCPM into a single dataframe ===========================================
+##Calculate CPM and Log2 CPM values from the dgelist.filtered.norm object --------------------
 cpm.dgelist.filtered.norm <- cpm(dgelist.filtered.norm)
 lcpm.dgelist.filtered.norm <- cpm(dgelist.filtered.norm, log = TRUE)
 
-###Create long format dataframe called df.plotting containing these CPM values-------------
-long.cpm.dgelist.filtered.norm <- as.data.frame(cpm.dgelist.filtered.norm) %>%
-  rownames_to_column("Gene_ID") %>%
-  pivot_longer(-Gene_ID, values_to = "CPM", names_to = "SRR_ID")
+#Boxplots to show before and after normalization ============================================
+##Calculate LogCPM for raw counts (before normalization, use filtered data) ------------------
+raw.lcpm <- cpm(dgelist.filtered, log = TRUE) # FIXED: Use filtered data for consistency
 
-###Create long format dataframe called df.plotting containing these LCPM values------------
-long.lcpm.dgelist.filtered.norm <- as.data.frame(lcpm.dgelist.filtered.norm) %>%
+##Create a long format dataframe for raw LogCPM values (before normalization)
+long.raw.lcpm <- as.data.frame(raw.lcpm) %>%
   rownames_to_column("Gene_ID") %>%
-  pivot_longer(-Gene_ID, values_to = "LogCPM", names_to = "SRR_ID")
+  pivot_longer(-Gene_ID, values_to = "LogCPM", names_to = "SRR_ID") %>%
+  mutate(Status = "Before Normalization")
 
-###Creting a new table that included sample and gene metadata-------------------------------
-df.plotting <- full_join(long.cpm.dgelist.filtered.norm, long.lcpm.dgelist.filtered.norm)
-df.plotting <- left_join(df.plotting, sample.meta.data, by = c("SRR_ID" = "SRR_ID")) #Joining sample meta data
-df.plotting <- left_join(df.plotting, gene.meta.data, by = c("Gene_ID" = "Gene_ID"))
+##Create a long format dataframe for normalized LogCPM values (after normalization)
+long.norm.lcpm <- as.data.frame(lcpm.dgelist.filtered.norm) %>%
+  rownames_to_column("Gene_ID") %>%
+  pivot_longer(-Gene_ID, values_to = "LogCPM", names_to = "SRR_ID") %>%
+  mutate(Status = "After Normalization")
+
+##Combine both data frames for plotting -----------------------------------------------------
+combined.lcpm <- bind_rows(long.raw.lcpm, long.norm.lcpm)
+
+##Plot the boxplots --------------------------------------------------------------------------
+ggplot(combined.lcpm, aes(x = SRR_ID, y = LogCPM, fill = Status)) +
+  geom_boxplot(outlier.shape = 0.5, alpha = 0.5) + # Boxplot without outliers
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + # Rotate x-axis labels
+  facet_wrap(~ Status, nrow = 2) + # Separate before and after normalization
+  labs(
+    title = "Comparison of LogCPM Before and After Normalization",
+    x = "Sample",
+    y = "LogCPM"
+  ) +
+  theme_minimal()
+
+
 
 #PCA===============================================================================================================
 ##Scree plot--------------------------------------------------------------------------------
@@ -115,7 +127,7 @@ class(sample.meta.data$Patient)
 
 ##Create Donor and Cell type factors----------------------------------------------------------
 Patient <- factor(sample.meta.data$Patient) # Assuming "Patient" represents Donor
-Tissue <- factor(sample.meta.data$Tissue) # Assuming "A" represents Celltype
+Tissue <- factor(sample.meta.data$Tissue) # Assuming "Tissue" represents Celltype
 
 ##Create a design matrix for Tissue (Celltype)-------------------------------------------------
 design <- model.matrix(~Tissue)
@@ -293,12 +305,12 @@ top_15_BM_Heat <- DE %>%
   filter(FDR < 0.05, logFC < 0) %>%  
   arrange(logFC) %>%                
   slice_head(n = 15) 
-  
-  top_15_CNS_Heat <- DE %>%
+
+top_15_CNS_Heat <- DE %>%
   filter(FDR < 0.05, logFC > 0) %>%  
   arrange(desc(logFC)) %>%          
   slice_head(n = 15)
-  
+
 top_DEGs_Heat <- bind_rows(top_15_BM_Heat, top_15_CNS_Heat)
 top_gene_names_Heat <- top_DEGs_Heat$Gene_Name
 
@@ -343,3 +355,4 @@ Heatmap(
     legend_direction = "horizontal"
   )
 )
+
