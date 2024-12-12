@@ -325,17 +325,17 @@ top_DEGs_Heat <- bind_rows(top_15_BM_Heat, top_15_CNS_Heat)
 top_gene_names_Heat <- top_DEGs_Heat$Gene_Name
 
 ##Subset CPM matrix for top DEGs----------------------------------------------------------------------
-cpm_top_DEGs_Heat <- cpm.dgelist.filtered.norm[rownames(lcpm.dgelist.filtered.norm) %in% top_gene_names_Heat, ]
+lcpm_top_DEGs_Heat <- lcpm.dgelist.filtered.norm[rownames(lcpm.dgelist.filtered.norm) %in% top_gene_names_Heat, ]
 
 ##Ensuring rows are ordered to match the top DEGs----------------------------------------------------
-cpm_top_DEGs_Heat <- cpm_top_DEGs_Heat[match(top_gene_names_Heat, rownames(cpm_top_DEGs_Heat)), ]
+lcpm_top_DEGs_Heat <- lcpm_top_DEGs_Heat[match(top_gene_names_Heat, rownames(lcpm_top_DEGs_Heat)), ]
 
 ##Perform Z- score scaling (gene-wise normalization)--------------------------------------------------
-z.scaled.cpm_top_DEGs_Heat <- t(scale(t(cpm_top_DEGs_Heat)))
+z.scaled.lcpm_top_DEGs_Heat <- t(scale(t(lcpm_top_DEGs_Heat)))
 
 ##Heatmap
 Heatmap(
-  matrix = z.scaled.cpm_top_DEGs_Heat,
+  matrix = z.scaled.lcpm_top_DEGs_Heat,
   cluster_rows = TRUE,          # Cluster genes
   cluster_columns = TRUE,       # Cluster samples
   show_row_names = TRUE,        # Show gene names
