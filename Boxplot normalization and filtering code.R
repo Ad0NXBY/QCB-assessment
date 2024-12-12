@@ -9,8 +9,6 @@ sample.meta.data <- data.frame(
   Patient = sapply(strsplit(sample_names, "_"), `[`, 1) # Extract patient ID
 )
 
-# Validate metadata to ensure it matches expectations
-print(head(sample.meta.data)) # FIXED: Added for validation
 
 # Creating the gene metadata ------------------------------------------------------------------
 gene.meta.data <- data.frame(
@@ -27,9 +25,6 @@ dgelist <- DGEList(counts = counts_matrix) # Creates a DGEList object
 
 # Filtering -----------------------------------------------------------------------------------
 index.keep.expr <- filterByExpr(dgelist, group = sample.meta.data$Tissue) # FIXED: Correct grouping
-
-# Validate filtering to ensure appropriate number of genes retained
-print(table(index.keep.expr)) # FIXED: Added for validation
 
 # Filter lowly expressed genes ----------------------------------------------------------------
 dgelist.filtered <- dgelist[index.keep.expr, , keep.lib.sizes = FALSE]
@@ -86,3 +81,4 @@ ggplot(combined.lcpm, aes(x = SRR_ID, y = LogCPM, fill = Status)) +
     y = "LogCPM"
   ) +
   theme_minimal()
+

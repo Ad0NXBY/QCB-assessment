@@ -99,12 +99,7 @@ ggplot(combined.lcpm, aes(x = SRR_ID, y = LogCPM, fill = Status)) +
 
 #PCA===============================================================================================================
 ##Scree plot--------------------------------------------------------------------------------
-head(lcpm.dgelist.filtered.norm)
-SD <- apply(lcpm.dgelist.filtered.norm, 1 ,sd) #Calculate the SD of the LCPM
-threshold <- quantile(SD, 0.9) #threshold for top 10% of SD
-top_10_percent <- lcpm.dgelist.filtered.norm[SD >= threshold, ]
-##PCA on top 10%----------------------------------------------------------------------------
-DS1.svd <- top_10_percent |> 
+DS1.svd <- lcpm.dgelist.filtered.norm |> 
   t() |> 
   prcomp(scale = FALSE) # PCA using prcomp()
 summary(DS1.svd)
@@ -112,12 +107,12 @@ summary(DS1.svd)
 fviz_eig(DS1.svd, addlabels = TRUE) + 
   theme_pubr(base_size = 9)
 
-fviz_pca_ind(DS1.svd, label = "none", addEllipses = T, invisible = "quali") +
-  theme_pubr(base_size = 9)
-
 ##PCA Plot-------------------------------------------------------------------------------------
-fviz_pca_ind(DS1.svd, repel = FALSE)
-
+fviz_pca_ind(DS1.svd, repel = FALSE) + 
+  expand_limits(x = 6) +
+  labs(title = "B_ALL PCA",
+       x = "PC1",
+       y = "PC2")
 
 
 #IDENTIFICATION OF DEGs BETWEEN GROUPS==============================================================================
@@ -185,46 +180,65 @@ top_15_CNS_Vol <- DE %>%
 ###Combining the top 15 DEGs for BM and CNS-----------------------------------------------
 top_30_DEGs_Vol <- bind_rows(top_15_BM_Vol, top_15_CNS_Vol)
 
-###Creating plot--------------------------------------------------------------------------
+### Creating plot--------------------------------------------------------------------------
+### Creating plot--------------------------------------------------------------------------
 ggplot() +
-  #Plotting significant genes (FDR < 0.05) in blue
+  # Plot non-significant genes (FDR >= 0.05 or -1 < logFC < 1) in grey
   geom_point(
-    data = filter(DE, FDR < 0.05),
-    aes(x = logFC, y = -log10(PValue)),
-    color = "blue", alpha = 0.5, size = 1.5 
+    data = filter(DE, FDR >= 0.05 | (logFC > -1 & logFC < 1)),
+    aes(x = logFC, y = -log10(PValue), color = "Non-Significant"),
+    alpha = 0.5, size = 1.5
   ) +
-  #Plotting non-significant genes (FDR > 0.05) in grey
+  # Plot downregulated significant genes (FDR < 0.05 and logFC <= -1) in orange
   geom_point(
-    data = filter(DE, FDR >= 0.05),
-    aes(x = logFC, y = -log10(PValue)),
-    color = "grey", alpha= 0.5, size = 1.5
+    data = filter(DE, FDR < 0.05 & logFC <= -1),
+    aes(x = logFC, y = -log10(PValue), color = "Downregulated"),
+    alpha = 0.5, size = 1.5
   ) +
-  #labelling top 15 DEGs for BM and CNS, colored by Tissue
+  # Plot upregulated significant genes (FDR < 0.05 and logFC >= 1) in blue
+  geom_point(
+    data = filter(DE, FDR < 0.05 & logFC >= 1),
+    aes(x = logFC, y = -log10(PValue), color = "Upregulated"),
+    alpha = 0.5, size = 1.5
+  ) +
+  # Label top 15 DEGs for BM and CNS, colored by Tissue
   geom_text_repel(
     data = top_30_DEGs_Vol,
-    aes(x = logFC, y = -log10(PValue), label= Gene_Name, color = Tissue),
-    size = 3, max.overlaps = 15
+    aes(x = logFC, y = -log10(PValue), label = Gene_Name, color = Tissue),
+    size = 3, max.overlaps = 20  # Increased max.overlaps to handle overlaps better
   ) +
-  #Adding Dashed lines for the thresholds
-  geom_vline(xintercept = c(-1,1), linetype = "dashed", color = "black", linewidth = 0.8) +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black", linewidth = 0.8) +
-  #Customize the plot's appearance
+  # Adding dashed lines for the thresholds
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "black", linewidth = 0.8) +
+  geom_hline(yintercept = -log10(0.02), linetype = "dashed", color = "black", linewidth = 0.8) +
+  # Customize the plot's appearance
   theme_bw() +
-  scale_color_manual(values = c("BM" = "red", "CNS" = "green")) +
+  scale_color_manual(
+    values = c(
+      "Upregulated" = "blue", 
+      "Downregulated" = "orange", 
+      "Non-Significant" = "grey",
+      "BM" = "red", 
+      "CNS" = "green"
+    )
+  ) +
   labs(
     title = "Volcano Plot highlighting Top 15 DEGs for BM and CNS",
-    subtitle = "Genes colored by tissue type",
+    subtitle = "Genes colored by tissue type and regulation",
     x = "Log2 Fold Change",
     y = "-Log10(PValue)",
-    color = "Tissue Type"
+    color = "Gene Category"
   ) +
   theme(
     plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-    plot.subtitle = element_text(hjust = 0.5, size = 12), 
-    legend.position = "top"
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    legend.position = "right",  # Move the legends to the right
+    legend.box = "vertical",    # Stack legends vertically
+    legend.box.spacing = unit(0.5, "cm")  # Add spacing between the legends
+  ) +
+  guides(
+    color = guide_legend(title = "Gene Category", override.aes = list(size = 3)),  # Gene Category legend
+    fill = guide_legend(title = "Tissue Type")  # Tissue Type legend
   )
-
-
 
 
 
@@ -278,8 +292,8 @@ dim(z.scaled.genes.cluster3)
 ##Save row names to a csv file-------------------------------------------------------------------
 write.csv(rownames(z.scaled.genes.cluster3), file = "cluster3_genenames.csv")
 
-##Heatmap------------------------------------------------------------------------------------------
-###Plot a heatmap of gene cluster 3 values WITHOUT clustering rows or columns, do not plot gene names--
+#HEATMAP==========================================================================================
+##Plot a heatmap of gene cluster 3 values WITHOUT clustering rows or columns, do not plot gene names--
 Heatmap(
   z.scaled.genes.cluster3, 
   cluster_rows= FALSE, 
@@ -287,17 +301,13 @@ Heatmap(
   show_row_names = FALSE
 )
 
-###Plot the same data again, clustering columns and rows with the default linkage methods for sample and genes, DO NOT plot gene names---
+##Plot the same data again, clustering columns and rows with the default linkage methods for sample and genes, DO NOT plot gene names---
 Heatmap(
   z.scaled.genes.cluster3,
   cluster_rows= TRUE,
   cluster_columns = TRUE,
   show_row_names = FALSE
 )
-
-
-#ASK ADAM WHAT IS THIS PART FOR=====================================================================
-
 
 
 ##Identify the top 15 DEGs for BM(logFC < 0) and CND (logFC > 0) and combine the top DEGs------------
@@ -314,36 +324,18 @@ top_15_CNS_Heat <- DE %>%
 top_DEGs_Heat <- bind_rows(top_15_BM_Heat, top_15_CNS_Heat)
 top_gene_names_Heat <- top_DEGs_Heat$Gene_Name
 
-###Subset CPM matrix for top DEGs----------------------------------------------------------------------
-cpm_top_DEGs_Heat <- cpm.dgelist.filtered.norm[rownames(cpm.dgelist.filtered.norm) %in% top_gene_names_Heat, ]
+##Subset CPM matrix for top DEGs----------------------------------------------------------------------
+lcpm_top_DEGs_Heat <- lcpm.dgelist.filtered.norm[rownames(lcpm.dgelist.filtered.norm) %in% top_gene_names_Heat, ]
 
-###Ensuring rows are ordered to match the top DEGs----------------------------------------------------
-cpm_top_DEGs_Heat <- cpm_top_DEGs_Heat[match(top_gene_names_Heat, rownames(cpm_top_DEGs_Heat)), ]
+##Ensuring rows are ordered to match the top DEGs----------------------------------------------------
+lcpm_top_DEGs_Heat <- lcpm_top_DEGs_Heat[match(top_gene_names_Heat, rownames(lcpm_top_DEGs_Heat)), ]
 
 ##Perform Z- score scaling (gene-wise normalization)--------------------------------------------------
-z.scaled.cpm_top_DEGs_Heat <- t(scale(t(cpm_top_DEGs_Heat)))
-
-##Add sample annotations for Tissue type
-sample_annotations <- data.frame(
-  Tissue = sample.meta.data$Tissue[match(colnames(z.scaled.cpm_top_DEGs_Heat), sample.meta.data$sample_name)]
-)
-
-##Convert Tissue to a factor for annotation
-sample_annotations$Tissue <- factor(sample_annotations$Tissue, levels = c("BM", "CNS"))
-
-##Define annotation colors-----------------------------------------------
-annotation_color <- list(Tissue = c(BM = "red", CNS = "green"))
-
-###Create heatmap annotation object
-ha <- HeatmapAnnotation(
-  df = sample_annotations,
-  col = annotation_color
-)
+z.scaled.lcpm_top_DEGs_Heat <- t(scale(t(lcpm_top_DEGs_Heat)))
 
 ##Heatmap
 Heatmap(
-  matrix = z.scaled.cpm_top_DEGs_Heat,
-  top_annotation = ha,          # Add sample annotations
+  matrix = z.scaled.lcpm_top_DEGs_Heat,
   cluster_rows = TRUE,          # Cluster genes
   cluster_columns = TRUE,       # Cluster samples
   show_row_names = TRUE,        # Show gene names
@@ -355,4 +347,5 @@ Heatmap(
     legend_direction = "horizontal"
   )
 )
+
 
